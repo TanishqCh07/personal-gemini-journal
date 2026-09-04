@@ -1,0 +1,48 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile entity",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique Firebase Authentication UID" },
+        "email": { "type": "string", "description": "User email address" },
+        "displayName": { "type": "string", "description": "User display name" },
+        "photoURL": { "type": "string", "description": "User avatar URL" },
+        "createdAt": { "type": "string", "description": "ISO timestamp of user creation" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Interaction": {
+      "title": "Interaction",
+      "description": "Journal entry, multi-turn dialogue, and AI reflection record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Document ID" },
+        "userId": { "type": "string", "description": "Owner Firebase UID" },
+        "title": { "type": "string", "description": "Entry title or topic" },
+        "entry": { "type": "string", "description": "Original journal reflection or prompt" },
+        "category": { "type": "string", "description": "Topic category", "enum": ["reflection", "brainstorm", "summary", "gratitude", "challenge", "general"] },
+        "aiResponse": { "type": "string", "description": "Gemini generated feedback, insights, or advice" },
+        "summary": { "type": "string", "description": "Concise key takeaways extracted by Gemini" },
+        "messages": {
+          "type": "array",
+          "description": "Multi-turn dialogue exchange history"
+        },
+        "createdAt": { "type": "string", "description": "ISO timestamp of creation" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp of last update" }
+      },
+      "required": ["userId", "title", "entry", "aiResponse", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Isolated profile document for authenticated users"
+    },
+    "/users/{userId}/interactions/{interactionId}": {
+      "schema": "Interaction",
+      "description": "User-isolated journal reflections, AI insights, and multi-turn conversations"
+    }
+  }
+}
