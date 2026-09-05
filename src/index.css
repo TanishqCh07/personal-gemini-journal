@@ -1,1 +1,246 @@
 @import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-slate-850: #172033;
+}
+
+/* ==========================================================================
+   Google Maps Places Autocomplete Styling (Theme-responsive & High Contrast)
+   ========================================================================== */
+
+/* 1. gmp-place-autocomplete Web Component Host & CSS Variables (Light Mode) */
+gmp-place-autocomplete {
+  width: 100% !important;
+  color-scheme: light !important;
+  background-color: transparent !important;
+  border: none !important;
+  border-radius: 0.75rem !important;
+  font-family: inherit !important;
+  color: #0f172a !important; /* slate-900 */
+  --gmp-mat-color-surface: #ffffff;
+  --gmp-mat-color-on-surface: #0f172a;
+  --gmp-mat-color-on-surface-variant: #475569;
+  --gmp-mat-color-surface-container: #ffffff;
+  --gmp-mat-color-surface-container-highest: #f1f5f9;
+  --gmp-mat-color-outline: #e2e8f0;
+  --gmp-mat-color-primary: #4f46e5;
+  --gmp-mat-color-on-primary: #ffffff;
+}
+
+/* Light Mode Shadow Parts */
+gmp-place-autocomplete::part(input) {
+  background-color: transparent !important;
+  color: #0f172a !important;
+  font-size: 0.8125rem !important;
+  font-family: inherit !important;
+  border: none !important;
+  outline: none !important;
+}
+
+gmp-place-autocomplete::part(search-icon) {
+  color: #6366f1 !important; /* indigo-500 */
+  fill: #6366f1 !important;
+}
+
+gmp-place-autocomplete::part(clear-button) {
+  color: #64748b !important; /* slate-500 */
+  fill: #64748b !important;
+}
+
+gmp-place-autocomplete::part(prediction-list) {
+  background-color: #ffffff !important;
+  border: 1px solid #e2e8f0 !important; /* slate-200 */
+  border-radius: 0.75rem !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1) !important;
+  color: #0f172a !important;
+  overflow: hidden !important;
+}
+
+gmp-place-autocomplete::part(prediction-item) {
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+}
+
+gmp-place-autocomplete::part(prediction-item-main-text) {
+  color: #0f172a !important; /* high-contrast dark place name */
+  font-weight: 600 !important;
+}
+
+gmp-place-autocomplete::part(prediction-item-secondary-text) {
+  color: #475569 !important; /* high-contrast dark address line */
+}
+
+gmp-place-autocomplete::part(prediction-item-icon) {
+  color: #4f46e5 !important; /* indigo pin icon */
+  fill: #4f46e5 !important;
+}
+
+gmp-place-autocomplete::part(prediction-item):hover,
+gmp-place-autocomplete::part(prediction-item-selected) {
+  background-color: #f1f5f9 !important; /* slate-100 clearly visible background change */
+}
+
+/* 2. gmp-place-autocomplete (Dark Mode) */
+.dark gmp-place-autocomplete,
+html.dark gmp-place-autocomplete {
+  color-scheme: dark !important;
+  background-color: transparent !important;
+  color: #f8fafc !important; /* slate-50 */
+  --gmp-mat-color-surface: #1e293b; /* slate-800: matching app dark card/input surface */
+  --gmp-mat-color-on-surface: #f8fafc;
+  --gmp-mat-color-on-surface-variant: #cbd5e1;
+  --gmp-mat-color-surface-container: #1e293b;
+  --gmp-mat-color-surface-container-highest: #334155;
+  --gmp-mat-color-outline: #334155;
+  --gmp-mat-color-primary: #818cf8;
+  --gmp-mat-color-on-primary: #0f172a;
+}
+
+.dark gmp-place-autocomplete::part(input),
+html.dark gmp-place-autocomplete::part(input) {
+  background-color: transparent !important;
+  color: #f8fafc !important;
+}
+
+.dark gmp-place-autocomplete::part(search-icon),
+html.dark gmp-place-autocomplete::part(search-icon) {
+  color: #818cf8 !important; /* indigo-400 */
+  fill: #818cf8 !important;
+}
+
+.dark gmp-place-autocomplete::part(clear-button),
+html.dark gmp-place-autocomplete::part(clear-button) {
+  color: #94a3b8 !important; /* slate-400 */
+  fill: #94a3b8 !important;
+}
+
+.dark gmp-place-autocomplete::part(prediction-list),
+html.dark gmp-place-autocomplete::part(prediction-list) {
+  background-color: #1e293b !important; /* slate-800 */
+  border: 1px solid #334155 !important; /* slate-700 */
+  border-radius: 0.75rem !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5) !important;
+  color: #f8fafc !important;
+  overflow: hidden !important;
+}
+
+.dark gmp-place-autocomplete::part(prediction-item),
+html.dark gmp-place-autocomplete::part(prediction-item) {
+  color: #f8fafc !important;
+  background-color: #1e293b !important;
+}
+
+.dark gmp-place-autocomplete::part(prediction-item-main-text),
+html.dark gmp-place-autocomplete::part(prediction-item-main-text) {
+  color: #f8fafc !important; /* high-contrast light place name */
+  font-weight: 600 !important;
+}
+
+.dark gmp-place-autocomplete::part(prediction-item-secondary-text),
+html.dark gmp-place-autocomplete::part(prediction-item-secondary-text) {
+  color: #cbd5e1 !important; /* high-contrast light address line */
+}
+
+.dark gmp-place-autocomplete::part(prediction-item-icon),
+html.dark gmp-place-autocomplete::part(prediction-item-icon) {
+  color: #818cf8 !important; /* indigo-400 pin icon */
+  fill: #818cf8 !important;
+}
+
+.dark gmp-place-autocomplete::part(prediction-item):hover,
+.dark gmp-place-autocomplete::part(prediction-item-selected),
+html.dark gmp-place-autocomplete::part(prediction-item):hover,
+html.dark gmp-place-autocomplete::part(prediction-item-selected) {
+  background-color: #334155 !important; /* slate-700 clearly visible background change */
+}
+
+/* 3. Classic Google Places Autocomplete Dropdown (.pac-container) */
+.pac-container {
+  background-color: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1) !important;
+  font-family: inherit !important;
+  margin-top: 6px !important;
+  overflow: hidden !important;
+  z-index: 99999 !important;
+}
+
+.pac-item {
+  padding: 8px 12px !important;
+  font-size: 12px !important;
+  color: #475569 !important; /* high-contrast secondary address line */
+  border-top: 1px solid #f1f5f9 !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  line-height: 1.4 !important;
+}
+
+.pac-item:first-child {
+  border-top: none !important;
+}
+
+.pac-item:hover,
+.pac-item-selected {
+  background-color: #f1f5f9 !important; /* visible hover background change */
+}
+
+.pac-item-query {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: #0f172a !important; /* high-contrast place name in light mode */
+  padding-right: 4px !important;
+}
+
+.pac-matched {
+  font-weight: 700 !important;
+  color: #4f46e5 !important; /* indigo-600 */
+}
+
+.pac-icon {
+  margin-top: 0 !important;
+  margin-right: 8px !important;
+  filter: invert(30%) sepia(80%) saturate(2000%) hue-rotate(225deg) brightness(85%) contrast(100%) !important;
+}
+
+/* Dark mode for .pac-container */
+html.dark .pac-container,
+.dark .pac-container {
+  background-color: #1e293b !important; /* slate-800 matching dark theme surface */
+  border: 1px solid #334155 !important; /* slate-700 */
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5) !important;
+}
+
+html.dark .pac-item,
+.dark .pac-item {
+  background-color: #1e293b !important;
+  color: #cbd5e1 !important; /* high-contrast light address line */
+  border-top: 1px solid #334155 !important;
+}
+
+html.dark .pac-item:hover,
+html.dark .pac-item-selected,
+.dark .pac-item:hover,
+.dark .pac-item-selected {
+  background-color: #334155 !important; /* slate-700 visible hover background change */
+  color: #f8fafc !important;
+}
+
+html.dark .pac-item-query,
+.dark .pac-item-query {
+  color: #f8fafc !important; /* high-contrast light place name */
+}
+
+html.dark .pac-matched,
+.dark .pac-matched {
+  color: #818cf8 !important; /* indigo-400 */
+}
+
+html.dark .pac-icon,
+.dark .pac-icon {
+  filter: invert(70%) sepia(80%) saturate(2000%) hue-rotate(210deg) brightness(120%) contrast(100%) !important; /* indigo-400 pin icon */
+}
+

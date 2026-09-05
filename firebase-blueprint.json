@@ -30,7 +30,9 @@
           "description": "Multi-turn dialogue exchange history"
         },
         "createdAt": { "type": "string", "description": "ISO timestamp of creation" },
-        "updatedAt": { "type": "string", "description": "ISO timestamp of last update" }
+        "updatedAt": { "type": "string", "description": "ISO timestamp of last update" },
+        "editedAt": { "type": "string", "description": "ISO timestamp of user edit" },
+        "content": { "type": "string", "description": "Original journal content" }
       },
       "required": ["userId", "title", "entry", "aiResponse", "createdAt"]
     }

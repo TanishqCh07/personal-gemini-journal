@@ -12,15 +12,18 @@ A production-grade, user-authenticated journaling and thought-partner web applic
 - **Resilient AI Thought Partner**: Built with the `@google/genai` SDK using a resilient model fallback ladder (`gemini-3.6-flash` → `gemini-3.1-flash-lite` → `gemini-flash-latest` → `gemini-3.7-flash`) to gracefully recover from transient API limits or outages.
 - **Automatic Key Takeaway Summarization**: Generates insightful reflections, constructive brainstorming prompts, and a concise 1-2 sentence core theme summary for every journal reflection.
 - **Multi-Turn Contextual Conversation**: Continue talking with Gemini on any saved entry to unpack dilemmas, formulate action plans, or reflect deeper.
-- **Zero Hardcoding & Secret Manager Ready**: The Gemini API key is managed securely on the server-side via environment variables and Google Cloud Secret Manager.
+- **Location-Aware Journaling (Google Maps Places Autocomplete)**: Attach place names, formatted addresses, and coordinates to entries via Google Maps Platform Places Autocomplete web components, displayed as styled location chips in Vault History and entry details.
+- **Voice Input Dictation (Web Speech API)**: Native, zero-cost voice dictation using the browser's built-in Web Speech API (`SpeechRecognition`). Includes a live pulsing recording indicator, real-time transcription streaming into existing text, and seamless text-only fallback for unsupported browsers.
+- **Zero Hardcoding & Secret Management**: Dedicated `GEMINI_API_KEY` and client-restricted `MAPS_API_KEY` managed securely without hardcoded credentials.
 
 ---
 
 ## 🛠️ Tech Stack & Architecture
 
-- **Frontend**: React 19, TypeScript, Tailwind CSS, Lucide Icons, React Markdown, Motion
+- **Frontend**: React 19, TypeScript, Tailwind CSS, Lucide Icons, React Markdown, Motion, `@googlemaps/js-api-loader`
 - **Backend**: Express.js with Vite Middleware (Dev & Production bundling with esbuild)
-- **AI Engine**: Gemini 3.6 Flash API (`@google/genai`)
+- **AI Engine**: Gemini 3.6 Flash API (`@google/genai`) with model fallback ladder
+- **Maps Platform**: Google Maps JavaScript API (Places Autocomplete Element, attribution ID `gmp_mcp_codeassist_v1_aistudio`)
 - **Database & Identity**: Firebase Authentication (Google Sign-In) & Cloud Firestore
 
 ---
@@ -61,7 +64,20 @@ PROJECT_NUMBER=$(gcloud projects describe $(gcloud config get-value project) --f
 gcloud secrets add-iam-policy-binding GEMINI_API_KEY \
   --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
   --role="roles/secretmanager.secretAccessor"
+
+# 4. (Optional) Create MAPS_API_KEY secret for location tagging
+gcloud secrets create MAPS_API_KEY --replication-policy="automatic"
+echo -n "YOUR_MAPS_API_KEY" | gcloud secrets versions add MAPS_API_KEY --data-file=-
+gcloud secrets add-iam-policy-binding MAPS_API_KEY \
+  --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
 ```
+
+> **Google Maps Key Restrictions & Spend Safety**:
+> - Restrict API key to **Maps JavaScript API** and **Places API**.
+> - Restrict HTTP Referrers to your Cloud Run URL and AI Studio domain.
+> - Configure daily quotas/spend alert in Google Cloud Console.
+> - Grounded with attribution ID `gmp_mcp_codeassist_v1_aistudio`.
 
 ---
 
@@ -153,3 +169,26 @@ gcloud run services update gemini-reflection-journal \
    - In either the composer or multi-turn chat, toggle **"Recall from past entries"** ON.
    - Ask or write about a recurrent personal challenge or past reflection topic.
    - Verify that Gemini performs semantic ranking across your private vault and presents structured citations referencing past dates, categories, and key excerpts.
+
+7. **Location-Aware Journaling (Google Maps Places Autocomplete)**:
+   - In the composer, click **"Add location"** to reveal the Places Autocomplete input.
+   - Search for a venue, park, or city, and select a prediction.
+   - Verify that the location chip populates with place name, address, and coordinates.
+   - Save the reflection and confirm the location chip renders on the entry card in the **Reflection Vault** sidebar and detail header.
+   - Test graceful degradation: if `MAPS_API_KEY` is not provided or fails auth, the toggle gracefully hides while journaling continues uninterrupted.
+
+8. **Entry Deletion & Instant Vault Synchronization**:
+   - Locate any entry card in the **Reflection Vault** sidebar and click its small trash icon, or open the entry detail and click the **"Delete Entry"** button in the header.
+   - Verify the in-app confirmation dialog appears with the entry title and a warning about permanent Firestore deletion.
+   - Click **"Delete Permanently"** and confirm that:
+     - The document is deleted from Firestore under `/users/{userId}/interactions/{id}`.
+     - The entry is immediately removed from the Vault History list.
+     - The total entry counter decrements immediately.
+     - If viewing that entry, the view cleanly returns to the reflection composer.
+
+9. **Voice Input Dictation (Web Speech API)**:
+   - In the composer, check for the **"Voice Input"** microphone button in the toolbar and inside the textarea corner.
+   - Tap the microphone button. Observe the recording indicator appear: a pulsing red beacon, "Listening... Transcribing speech into text", and real-time interim speech preview.
+   - Speak naturally into your microphone and verify that the transcribed text streams and appends seamlessly into the textarea with appropriate spacing.
+   - Tap **"Done Speaking"** or the microphone button again to stop listening.
+   - Confirm that if the browser does not support SpeechRecognition or permissions are denied, the button hides or alerts gracefully, and the composer functions as normal text-only.

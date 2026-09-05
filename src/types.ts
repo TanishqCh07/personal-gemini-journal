@@ -22,19 +22,29 @@ export type JournalCategory =
   | 'challenge'
   | 'general';
 
+export interface PlaceLocation {
+  placeName: string;
+  lat: number;
+  lng: number;
+  formattedAddress?: string;
+}
+
 export interface Interaction {
   id: string;
   userId: string;
   title: string;
   entry: string;
+  content?: string;
   category: JournalCategory;
   aiResponse: string;
   summary: string;
   messages: DialogueMessage[];
   createdAt: string;
   updatedAt: string;
+  editedAt?: string;
   citations?: RecallCitation[];
   recalledCount?: number;
+  location?: PlaceLocation;
 }
 
 export interface UserProfile {

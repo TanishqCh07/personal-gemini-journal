@@ -115,6 +115,19 @@ app.get('/api/health', (_req, res) => {
 });
 
 /**
+ * GET /api/config/maps-key
+ * Returns dedicated Maps API Key for browser-side Places Autocomplete.
+ * Client-exposed by design; security enforced via HTTP referrer & API restrictions.
+ */
+app.get('/api/config/maps-key', (_req, res) => {
+  const mapsApiKey = process.env.MAPS_API_KEY || process.env.VITE_MAPS_API_KEY || '';
+  res.json({
+    mapsApiKey,
+    configured: Boolean(mapsApiKey),
+  });
+});
+
+/**
  * POST /api/gemini/reflect
  * Ingests a user reflection, journal entry, or prompt and produces:
  * - A thoughtful, constructive feedback/brainstorm/reflection response
