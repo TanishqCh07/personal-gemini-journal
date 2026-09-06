@@ -9,7 +9,8 @@ import {
   BookOpen,
   FolderOpen,
   PlusCircle,
-  MapPin
+  MapPin,
+  Star
 } from 'lucide-react';
 import { Interaction } from '../types';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
@@ -20,6 +21,8 @@ interface HistorySidebarProps {
   selectedId: string | null;
   onSelect: (interaction: Interaction) => void;
   onDelete: (interactionId: string) => void | Promise<void>;
+  onToggleStar: (interaction: Interaction) => void | Promise<void>;
+  onReorder: (draggedId: string, targetId: string) => void | Promise<void>;
   onNewReflection?: () => void;
 }
 
@@ -28,12 +31,21 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
   selectedId,
   onSelect,
   onDelete,
+  onToggleStar,
+  onReorder,
   onNewReflection,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [entryToDelete, setEntryToDelete] = useState<Interaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Drag-and-drop state
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
+  // Drag-to-reorder is only active when unfiltered (category === 'all' and search is empty)
+  const isDragEnabled = filterCategory === 'all' && searchTerm.trim() === '';
 
   const filteredInteractions = interactions.filter((item) => {
     const matchesCategory = filterCategory === 'all' || item.category === filterCategory;
@@ -45,6 +57,43 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
       (item.summary && item.summary.toLowerCase().includes(term));
     return matchesCategory && matchesSearch;
   });
+
+  // Separate into Starred and Unstarred blocks (starred always floats on top)
+  const starredList = filteredInteractions.filter((item) => Boolean(item.starred));
+  const unstarredList = filteredInteractions.filter((item) => !item.starred);
+
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, item: Interaction) => {
+    setDraggedId(item.id);
+    e.dataTransfer.setData('text/plain', item.id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>, item: Interaction) => {
+    if (!isDragEnabled || !draggedId || draggedId === item.id) return;
+    setDragOverId(item.id);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>, item: Interaction) => {
+    if (dragOverId === item.id) {
+      setDragOverId(null);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>, targetItem: Interaction) => {
+    if (!isDragEnabled || !draggedId || draggedId === targetItem.id) {
+      setDraggedId(null);
+      setDragOverId(null);
+      return;
+    }
+    onReorder(draggedId, targetItem.id);
+    setDraggedId(null);
+    setDragOverId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedId(null);
+    setDragOverId(null);
+  };
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-5 flex flex-col h-full transition-colors duration-200">
@@ -103,8 +152,8 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
         ))}
       </div>
 
-      {/* List */}
-      <div className="flex-1 overflow-y-auto space-y-2 pr-0.5">
+      {/* List container */}
+      <div className="flex-1 overflow-y-auto space-y-3 pr-0.5">
         {filteredInteractions.length === 0 ? (
           <div className="text-center py-10 px-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex flex-col items-center justify-center">
             <FolderOpen className="w-7 h-7 text-slate-300 dark:text-slate-600 mb-2" />
@@ -129,15 +178,80 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
             )}
           </div>
         ) : (
-          filteredInteractions.map((item) => (
-            <HistoryCard
-              key={item.id}
-              item={item}
-              isSelected={item.id === selectedId}
-              onSelect={onSelect}
-              onDeleteRequest={(target) => setEntryToDelete(target)}
-            />
-          ))
+          <>
+            {/* Starred Group (always floats on top) */}
+            {starredList.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between px-1 py-1 text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+                  <div className="flex items-center gap-1.5">
+                    <Star className="w-3 h-3 fill-amber-400 text-amber-500 dark:fill-amber-400 dark:text-amber-400" />
+                    <span>Starred ({starredList.length})</span>
+                  </div>
+                  {isDragEnabled && starredList.length > 1 && (
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">
+                      drag to reorder
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {starredList.map((item) => (
+                    <HistoryCard
+                      key={item.id}
+                      item={item}
+                      isSelected={item.id === selectedId}
+                      onSelect={onSelect}
+                      onDeleteRequest={(target) => setEntryToDelete(target)}
+                      onToggleStar={onToggleStar}
+                      isDragEnabled={isDragEnabled}
+                      onDragStart={handleDragStart}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                      onDragEnd={handleDragEnd}
+                      isDragging={draggedId === item.id}
+                      isDragOver={dragOverId === item.id && draggedId !== item.id}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Unstarred Group */}
+            {unstarredList.length > 0 && (
+              <div className="space-y-1.5">
+                {starredList.length > 0 && (
+                  <div className="flex items-center justify-between px-1 py-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800 pt-2.5">
+                    <span>Recent Reflections ({unstarredList.length})</span>
+                    {isDragEnabled && unstarredList.length > 1 && (
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">
+                        drag to reorder
+                      </span>
+                    )}
+                  </div>
+                )}
+                <div className="space-y-2">
+                  {unstarredList.map((item) => (
+                    <HistoryCard
+                      key={item.id}
+                      item={item}
+                      isSelected={item.id === selectedId}
+                      onSelect={onSelect}
+                      onDeleteRequest={(target) => setEntryToDelete(target)}
+                      onToggleStar={onToggleStar}
+                      isDragEnabled={isDragEnabled}
+                      onDragStart={handleDragStart}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                      onDragEnd={handleDragEnd}
+                      isDragging={draggedId === item.id}
+                      isDragOver={dragOverId === item.id && draggedId !== item.id}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 

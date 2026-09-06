@@ -13,16 +13,20 @@ import {
   Search,
   MapPin,
   Mic,
-  MicOff
+  MicOff,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { JournalCategory, Interaction, RecallCitation, PlaceLocation } from '../types';
 import { generateReflectionApi, recallFromVaultApi } from '../lib/geminiApi';
 import { saveInteractionToFirestore } from '../lib/firestoreService';
 import { PlaceAutocompleteInput } from './PlaceAutocompleteInput';
+import { isSpeechSynthesisSupported, speechManager, VOICE_MODE_STORAGE_KEY } from '../lib/speechSynthesis';
+import { AudioWaveVisualizer } from './AudioWaveVisualizer';
 
 interface JournalEditorProps {
   userId: string;
-  onEntrySaved: (interaction: Interaction) => void;
+  onEntrySaved: (interaction: Interaction, options?: { autoSpeak?: boolean }) => void;
   resetSignal?: number;
   vaultInteractions?: Interaction[];
 }
@@ -67,16 +71,41 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   const [interimText, setInterimText] = useState('');
   const [speechError, setSpeechError] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
+  const lastFinalizedIndexRef = useRef<number>(-1);
 
-  // Detect Web Speech API support
+  // SpeechSynthesis Voice Mode state
+  const [speechSynthesisSupported, setSpeechSynthesisSupported] = useState(false);
+  const [voiceMode, setVoiceMode] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return localStorage.getItem(VOICE_MODE_STORAGE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // Detect Web Speech API support (Recognition & Synthesis)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const hasSupport = Boolean(
         (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
       );
       setSpeechSupported(hasSupport);
+      setSpeechSynthesisSupported(isSpeechSynthesisSupported());
     }
   }, []);
+
+  const toggleVoiceMode = () => {
+    setVoiceMode((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(VOICE_MODE_STORAGE_KEY, String(next));
+      } catch {
+        // benign storage error
+      }
+      return next;
+    });
+  };
 
   const stopListening = () => {
     if (recognitionRef.current) {
@@ -88,16 +117,9 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       recognitionRef.current = null;
     }
     setIsListening(false);
-    setInterimText((prevInterim) => {
-      if (prevInterim && prevInterim.trim()) {
-        setEntry((prev) => {
-          const trimmed = prev.trim();
-          const spacer = trimmed.length > 0 ? ' ' : '';
-          return trimmed + spacer + prevInterim.trim();
-        });
-      }
-      return '';
-    });
+    // Clear interim text preview without writing to permanent journal text
+    setInterimText('');
+    lastFinalizedIndexRef.current = -1;
   };
 
   // Clean up on unmount
@@ -113,7 +135,11 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       return;
     }
 
+    // Stop in-progress SpeechSynthesis immediately so Gemini doesn't talk over user's voice input
+    speechManager.stop();
+
     setSpeechError(null);
+    lastFinalizedIndexRef.current = -1;
     const SpeechRecognitionClass =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
@@ -131,29 +157,45 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       recognition.onstart = () => {
         setIsListening(true);
         setSpeechError(null);
+        // Reset tracked finalized index on every fresh recognition session
+        lastFinalizedIndexRef.current = -1;
       };
 
       recognition.onresult = (event: any) => {
         let newlyFinalized = '';
         let currentInterim = '';
 
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          const transcript = event.results[i][0]?.transcript || '';
-          if (event.results[i].isFinal) {
-            newlyFinalized += transcript;
+        // Start processing strictly from event.resultIndex (the lowest index in event.results that has changed)
+        const resultIndex = typeof event.resultIndex === 'number' ? event.resultIndex : 0;
+
+        for (let i = resultIndex; i < event.results.length; ++i) {
+          const resultItem = event.results[i];
+          if (!resultItem) continue;
+          const transcript = resultItem[0]?.transcript || '';
+
+          if (resultItem.isFinal) {
+            // Track and append only newly finalized transcript segments that haven't been committed yet
+            if (i > lastFinalizedIndexRef.current) {
+              const cleaned = transcript.trim();
+              if (cleaned) {
+                newlyFinalized += (newlyFinalized ? ' ' : '') + cleaned;
+              }
+              lastFinalizedIndexRef.current = i;
+            }
           } else {
             currentInterim += transcript;
           }
         }
 
+        // Only append newly finalized text segments to the permanent journal entry
         if (newlyFinalized) {
           setEntry((prev) => {
             const trimmed = prev.trim();
-            const spacer = trimmed.length > 0 ? ' ' : '';
-            return trimmed + spacer + newlyFinalized.trim();
+            return trimmed ? `${trimmed} ${newlyFinalized}` : newlyFinalized;
           });
         }
 
+        // Interim results are displayed as temporary live feedback only
         setInterimText(currentInterim);
       };
 
@@ -176,6 +218,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       recognition.onend = () => {
         setIsListening(false);
         setInterimText('');
+        lastFinalizedIndexRef.current = -1;
       };
 
       recognitionRef.current = recognition;
@@ -223,6 +266,9 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
 
   const handleGenerateAndSave = async () => {
     stopListening();
+    // Cancel in-progress speech immediately when triggering a new reflection
+    speechManager.stop();
+
     if (!entry.trim()) {
       setErrorMessage('Please enter your thoughts before reflecting with Gemini.');
       return;
@@ -308,8 +354,8 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       setShowLocationToggle(false);
       setStatusMessage(null);
 
-      // 5. Notify parent to display the newly saved interaction
-      onEntrySaved(newInteraction);
+      // 5. Notify parent to display the newly saved interaction with autoSpeak preference
+      onEntrySaved(newInteraction, { autoSpeak: voiceMode });
     } catch (err: any) {
       console.error('Error generating reflection or saving to Firestore:', err);
       setErrorMessage(
@@ -421,54 +467,56 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
           />
         </div>
 
-        {/* Location Tagging (Places Autocomplete) */}
-        {mapsAvailable && (
-          <div className="pt-0.5">
-            <div className="flex items-center justify-between">
+        {/* Location Tagging (Places Autocomplete & Direct Entry) */}
+        <div className="pt-0.5">
+          <div className="flex items-center justify-between">
+            <button
+              id="toggle-location-btn"
+              type="button"
+              onClick={() => setShowLocationToggle((prev) => !prev)}
+              disabled={loading}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border transition cursor-pointer ${
+                selectedLocation
+                  ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 font-semibold shadow-2xs'
+                  : showLocationToggle
+                  ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 font-medium ring-2 ring-indigo-500/20'
+                  : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700'
+              }`}
+              title={showLocationToggle ? 'Close location search field' : 'Attach place name, address, and coordinates to this reflection'}
+            >
+              <MapPin className={`w-3.5 h-3.5 ${selectedLocation ? 'text-emerald-600 dark:text-emerald-400' : showLocationToggle ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`} />
+              <span>{selectedLocation ? selectedLocation.placeName : showLocationToggle ? 'Close location' : 'Add location'}</span>
+            </button>
+
+            {selectedLocation && (
               <button
-                id="toggle-location-btn"
+                id="change-location-btn"
                 type="button"
-                onClick={() => setShowLocationToggle(!showLocationToggle)}
-                disabled={loading}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border transition cursor-pointer ${
-                  selectedLocation
-                    ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 font-semibold shadow-2xs'
-                    : showLocationToggle
-                    ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-medium'
-                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700'
-                }`}
-                title="Attach place name, address, and coordinates to this reflection"
+                onClick={() => setShowLocationToggle((prev) => !prev)}
+                className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium transition cursor-pointer"
               >
-                <MapPin className={`w-3.5 h-3.5 ${selectedLocation ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`} />
-                <span>{selectedLocation ? selectedLocation.placeName : 'Add location'}</span>
+                {showLocationToggle ? 'Close' : 'Change'}
               </button>
-
-              {selectedLocation && !showLocationToggle && (
-                <button
-                  type="button"
-                  onClick={() => setShowLocationToggle(true)}
-                  className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium transition cursor-pointer"
-                >
-                  Change
-                </button>
-              )}
-            </div>
-
-            {showLocationToggle && (
-              <div className="mt-2 p-3 rounded-xl bg-slate-50/90 dark:bg-slate-850 border border-slate-200/90 dark:border-slate-800">
-                <PlaceAutocompleteInput
-                  selectedLocation={selectedLocation}
-                  onSelectPlace={(loc) => {
-                    setSelectedLocation(loc);
-                    setShowLocationToggle(false);
-                  }}
-                  onClearPlace={() => setSelectedLocation(null)}
-                  onLoadError={() => setMapsAvailable(false)}
-                />
-              </div>
             )}
           </div>
-        )}
+
+          {showLocationToggle && (
+            <div id="location-search-container" className="mt-2 p-3 rounded-xl bg-slate-50/90 dark:bg-slate-850 border border-slate-200/90 dark:border-slate-800 animate-in fade-in duration-200">
+              <PlaceAutocompleteInput
+                selectedLocation={selectedLocation}
+                onSelectPlace={(loc) => {
+                  setSelectedLocation(loc);
+                  setShowLocationToggle(false);
+                }}
+                onClearPlace={() => {
+                  setSelectedLocation(null);
+                }}
+                onClose={() => setShowLocationToggle(false)}
+                onLoadError={() => setMapsAvailable(false)}
+              />
+            </div>
+          )}
+        </div>
 
         <div>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
@@ -493,10 +541,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 >
                   {isListening ? (
                     <>
-                      <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-600" />
-                      </span>
+                      <AudioWaveVisualizer active={true} colorVariant="rose" size="sm" barCount={5} />
                       <MicOff className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
                       <span>Stop Listening</span>
                     </>
@@ -530,6 +575,37 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 />
               </button>
 
+              {/* Web Speech API Voice Mode Toggle (gracefully hidden if SpeechSynthesis unsupported) */}
+              {speechSynthesisSupported && (
+                <button
+                  id="toggle-voice-mode-btn"
+                  type="button"
+                  onClick={toggleVoiceMode}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border transition cursor-pointer ${
+                    voiceMode
+                      ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 font-semibold shadow-2xs'
+                      : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                  }`}
+                  title={
+                    voiceMode
+                      ? 'Voice Mode is ON: Gemini reflection responses will be read aloud automatically'
+                      : 'Turn on Voice Mode to automatically hear Gemini reflection responses read aloud'
+                  }
+                >
+                  <Volume2
+                    className={`w-3.5 h-3.5 ${
+                      voiceMode ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'
+                    }`}
+                  />
+                  <span>Voice Mode</span>
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      voiceMode ? 'bg-indigo-600 dark:bg-indigo-400 animate-pulse' : 'bg-slate-300 dark:bg-slate-600'
+                    }`}
+                  />
+                </button>
+              )}
+
               <span className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:inline">
                 {entry.length} / 8,000 characters
               </span>
@@ -543,10 +619,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
               className="mb-2 p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-xs text-rose-900 dark:text-rose-200 flex items-center justify-between gap-3 shadow-2xs animate-in fade-in duration-200"
             >
               <div className="flex items-center gap-2.5 min-w-0">
-                <span className="relative flex h-3 w-3 shrink-0">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-600" />
-                </span>
+                <AudioWaveVisualizer active={true} colorVariant="rose" size="md" barCount={7} />
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className="font-semibold text-rose-950 dark:text-rose-100">Listening...</span>

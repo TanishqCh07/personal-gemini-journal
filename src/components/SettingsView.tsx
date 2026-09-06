@@ -11,14 +11,18 @@ import {
   Check, 
   KeyRound, 
   Cpu, 
-  ExternalLink 
+  ExternalLink,
+  Palette
 } from 'lucide-react';
 import { User } from 'firebase/auth';
+import { AccentColor, ACCENT_OPTIONS } from '../lib/theme';
 
 interface SettingsViewProps {
   user: User;
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
+  accent: AccentColor;
+  onSelectAccent: (accent: AccentColor) => void;
   onSignOut: () => void;
   onOpenSystemModal: () => void;
 }
@@ -27,6 +31,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   user,
   theme,
   onToggleTheme,
+  accent,
+  onSelectAccent,
   onSignOut,
   onOpenSystemModal,
 }) => {
@@ -182,7 +188,68 @@ service cloud.firestore {
         </div>
       </div>
 
-      {/* 3. Security & Data Section */}
+      {/* 3. Accent Color Section */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-xs space-y-6">
+        <div className="pb-4 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-2">
+            <Palette className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+              Accent Color
+            </h2>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Choose a primary highlight tone for buttons, active navigation, focus rings, and badges. Preference is remembered across sessions.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          {ACCENT_OPTIONS.map((opt) => {
+            const isSelected = accent === opt.id;
+            return (
+              <button
+                key={opt.id}
+                id={`settings-accent-${opt.id}-btn`}
+                type="button"
+                onClick={() => onSelectAccent(opt.id)}
+                className={`group relative flex flex-col items-center p-3.5 rounded-xl border transition-all cursor-pointer text-center ${
+                  isSelected
+                    ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/30 shadow-xs'
+                    : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-slate-850/50'
+                }`}
+                aria-pressed={isSelected}
+                title={`Select ${opt.label} accent`}
+              >
+                {/* Filled circle swatch with ring or checkmark */}
+                <div className="relative mb-2.5">
+                  <div
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-transform group-hover:scale-105 shadow-xs ${
+                      isSelected
+                        ? 'ring-2 ring-offset-2 ring-offset-white dark:ring-offset-slate-900 ring-slate-900 dark:ring-slate-100 scale-105'
+                        : ''
+                    }`}
+                    style={{ backgroundColor: opt.swatchHex }}
+                  >
+                    {isSelected && (
+                      <Check className="w-4 h-4 text-white drop-shadow-sm stroke-[3]" />
+                    )}
+                  </div>
+                </div>
+
+                <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                  {opt.label}
+                </span>
+                {opt.id === 'violet' && (
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">
+                    Default
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 4. Security & Data Section */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-xs space-y-6">
         <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
           <div>

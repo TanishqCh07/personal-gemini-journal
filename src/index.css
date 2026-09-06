@@ -4,6 +4,112 @@
 
 @theme {
   --color-slate-850: #172033;
+  --color-indigo-50: var(--accent-50);
+  --color-indigo-100: var(--accent-100);
+  --color-indigo-200: var(--accent-200);
+  --color-indigo-300: var(--accent-300);
+  --color-indigo-400: var(--accent-400);
+  --color-indigo-500: var(--accent-500);
+  --color-indigo-600: var(--accent-600);
+  --color-indigo-700: var(--accent-700);
+  --color-indigo-800: var(--accent-800);
+  --color-indigo-900: var(--accent-900);
+  --color-indigo-950: var(--accent-950);
+  --color-violet-50: var(--accent-50);
+  --color-violet-100: var(--accent-100);
+  --color-violet-200: var(--accent-200);
+  --color-violet-300: var(--accent-300);
+  --color-violet-400: var(--accent-400);
+  --color-violet-500: var(--accent-500);
+  --color-violet-600: var(--accent-600);
+  --color-violet-700: var(--accent-700);
+  --color-violet-800: var(--accent-800);
+  --color-violet-900: var(--accent-900);
+  --color-violet-950: var(--accent-950);
+}
+
+/* ==========================================================================
+   Dynamic Accent Color Themes (Violet, Ocean, Emerald, Rose, Amber)
+   ========================================================================== */
+:root,
+[data-accent="violet"] {
+  --accent-name: violet;
+  --accent-swatch: #6366f1;
+  --accent-50: #eef2ff;
+  --accent-100: #e0e7ff;
+  --accent-200: #c7d2fe;
+  --accent-300: #a5b4fc;
+  --accent-400: #818cf8;
+  --accent-500: #6366f1;
+  --accent-600: #4f46e5;
+  --accent-700: #4338ca;
+  --accent-800: #3730a3;
+  --accent-900: #312e81;
+  --accent-950: #1e1b4b;
+}
+
+[data-accent="ocean"] {
+  --accent-name: ocean;
+  --accent-swatch: #0ea5e9;
+  --accent-50: #f0f9ff;
+  --accent-100: #e0f2fe;
+  --accent-200: #bae6fd;
+  --accent-300: #7dd3fc;
+  --accent-400: #38bdf8;
+  --accent-500: #0ea5e9;
+  --accent-600: #0284c7;
+  --accent-700: #0369a1;
+  --accent-800: #075985;
+  --accent-900: #0c4a6e;
+  --accent-950: #082f49;
+}
+
+[data-accent="emerald"] {
+  --accent-name: emerald;
+  --accent-swatch: #10b981;
+  --accent-50: #ecfdf5;
+  --accent-100: #d1fae5;
+  --accent-200: #a7f3d0;
+  --accent-300: #6ee7b7;
+  --accent-400: #34d399;
+  --accent-500: #10b981;
+  --accent-600: #059669;
+  --accent-700: #047857;
+  --accent-800: #065f46;
+  --accent-900: #064e3b;
+  --accent-950: #022c22;
+}
+
+[data-accent="rose"] {
+  --accent-name: rose;
+  --accent-swatch: #f43f5e;
+  --accent-50: #fff1f2;
+  --accent-100: #ffe4e6;
+  --accent-200: #fecdd3;
+  --accent-300: #fda4af;
+  --accent-400: #fb7185;
+  --accent-500: #f43f5e;
+  --accent-600: #e11d48;
+  --accent-700: #be123c;
+  --accent-800: #9f1239;
+  --accent-900: #881337;
+  --accent-950: #4c0519;
+}
+
+[data-accent="amber"] {
+  --accent-name: amber;
+  --accent-swatch: #f59e0b;
+  --accent-50: #fffbeb;
+  --accent-100: #fef3c7;
+  --accent-200: #fde68a;
+  --accent-300: #fcd34d;
+  --accent-400: #fbbf24;
+  --accent-500: #f59e0b;
+  --accent-600: #d97706;
+  --accent-700: #b45309;
+  --accent-800: #92400e;
+  --accent-900: #78350f;
+  --accent-950: #451a03;
 }
 
 /* ==========================================================================
@@ -25,7 +131,7 @@ gmp-place-autocomplete {
   --gmp-mat-color-surface-container: #ffffff;
   --gmp-mat-color-surface-container-highest: #f1f5f9;
   --gmp-mat-color-outline: #e2e8f0;
-  --gmp-mat-color-primary: #4f46e5;
+  --gmp-mat-color-primary: var(--accent-600);
   --gmp-mat-color-on-primary: #ffffff;
 }
 
@@ -40,8 +146,8 @@ gmp-place-autocomplete::part(input) {
 }
 
 gmp-place-autocomplete::part(search-icon) {
-  color: #6366f1 !important; /* indigo-500 */
-  fill: #6366f1 !important;
+  color: var(--accent-500) !important;
+  fill: var(--accent-500) !important;
 }
 
 gmp-place-autocomplete::part(clear-button) {
@@ -73,8 +179,8 @@ gmp-place-autocomplete::part(prediction-item-secondary-text) {
 }
 
 gmp-place-autocomplete::part(prediction-item-icon) {
-  color: #4f46e5 !important; /* indigo pin icon */
-  fill: #4f46e5 !important;
+  color: var(--accent-600) !important;
+  fill: var(--accent-600) !important;
 }
 
 gmp-place-autocomplete::part(prediction-item):hover,
@@ -94,7 +200,7 @@ html.dark gmp-place-autocomplete {
   --gmp-mat-color-surface-container: #1e293b;
   --gmp-mat-color-surface-container-highest: #334155;
   --gmp-mat-color-outline: #334155;
-  --gmp-mat-color-primary: #818cf8;
+  --gmp-mat-color-primary: var(--accent-400);
   --gmp-mat-color-on-primary: #0f172a;
 }
 
@@ -106,8 +212,8 @@ html.dark gmp-place-autocomplete::part(input) {
 
 .dark gmp-place-autocomplete::part(search-icon),
 html.dark gmp-place-autocomplete::part(search-icon) {
-  color: #818cf8 !important; /* indigo-400 */
-  fill: #818cf8 !important;
+  color: var(--accent-400) !important;
+  fill: var(--accent-400) !important;
 }
 
 .dark gmp-place-autocomplete::part(clear-button),
@@ -145,8 +251,8 @@ html.dark gmp-place-autocomplete::part(prediction-item-secondary-text) {
 
 .dark gmp-place-autocomplete::part(prediction-item-icon),
 html.dark gmp-place-autocomplete::part(prediction-item-icon) {
-  color: #818cf8 !important; /* indigo-400 pin icon */
-  fill: #818cf8 !important;
+  color: var(--accent-400) !important;
+  fill: var(--accent-400) !important;
 }
 
 .dark gmp-place-autocomplete::part(prediction-item):hover,
@@ -197,7 +303,7 @@ html.dark gmp-place-autocomplete::part(prediction-item-selected) {
 
 .pac-matched {
   font-weight: 700 !important;
-  color: #4f46e5 !important; /* indigo-600 */
+  color: var(--accent-600) !important;
 }
 
 .pac-icon {
@@ -236,11 +342,115 @@ html.dark .pac-item-query,
 
 html.dark .pac-matched,
 .dark .pac-matched {
-  color: #818cf8 !important; /* indigo-400 */
+  color: var(--accent-400) !important;
 }
 
 html.dark .pac-icon,
 .dark .pac-icon {
   filter: invert(70%) sepia(80%) saturate(2000%) hue-rotate(210deg) brightness(120%) contrast(100%) !important; /* indigo-400 pin icon */
 }
+
+/* ==========================================================================
+   Siri-Style Audio Waveform Visualizer (SpeechSynthesis & Voice Input)
+   ========================================================================== */
+
+@keyframes siri-wave-1 {
+  0%   { transform: scaleY(0.20); }
+  50%  { transform: scaleY(0.72); }
+  100% { transform: scaleY(0.30); }
+}
+
+@keyframes siri-wave-2 {
+  0%   { transform: scaleY(0.28); }
+  50%  { transform: scaleY(0.90); }
+  100% { transform: scaleY(0.42); }
+}
+
+@keyframes siri-wave-3 {
+  0%   { transform: scaleY(0.36); }
+  50%  { transform: scaleY(0.98); }
+  100% { transform: scaleY(0.26); }
+}
+
+@keyframes siri-wave-4 {
+  0%   { transform: scaleY(0.32); }
+  50%  { transform: scaleY(1.00); }
+  100% { transform: scaleY(0.48); }
+}
+
+@keyframes siri-wave-5 {
+  0%   { transform: scaleY(0.38); }
+  50%  { transform: scaleY(0.92); }
+  100% { transform: scaleY(0.24); }
+}
+
+@keyframes siri-wave-6 {
+  0%   { transform: scaleY(0.26); }
+  50%  { transform: scaleY(0.84); }
+  100% { transform: scaleY(0.38); }
+}
+
+@keyframes siri-wave-7 {
+  0%   { transform: scaleY(0.20); }
+  50%  { transform: scaleY(0.66); }
+  100% { transform: scaleY(0.18); }
+}
+
+/* Individual Staggered Wave Classes */
+.siri-wave-bar-1 {
+  animation: siri-wave-1 1.05s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite alternate -0.2s;
+}
+.siri-wave-bar-2 {
+  animation: siri-wave-2 0.85s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite alternate -0.6s;
+}
+.siri-wave-bar-3 {
+  animation: siri-wave-3 1.20s cubic-bezier(0.4, 0.0, 0.6, 1.0) infinite alternate -0.35s;
+}
+.siri-wave-bar-4 {
+  animation: siri-wave-4 0.95s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite alternate -0.8s;
+}
+.siri-wave-bar-5 {
+  animation: siri-wave-5 1.10s cubic-bezier(0.4, 0.0, 0.6, 1.0) infinite alternate -0.15s;
+}
+.siri-wave-bar-6 {
+  animation: siri-wave-6 0.90s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite alternate -0.5s;
+}
+.siri-wave-bar-7 {
+  animation: siri-wave-7 1.15s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite alternate -0.75s;
+}
+
+/* Clean idle/rest state: flat pill baseline */
+.siri-bar-idle {
+  transform: scaleY(0.18);
+  opacity: 0.75;
+}
+
+/* Accent Color Visualizer (uses user's theme accent color) */
+.siri-bar-accent {
+  background-color: var(--accent-500);
+  box-shadow: 0 0 5px var(--accent-400);
+}
+.dark .siri-bar-accent {
+  background-color: var(--accent-400);
+  box-shadow: 0 0 7px var(--accent-400);
+}
+
+/* Rose Visualizer (for Voice Input recording) */
+.siri-bar-rose {
+  background-color: #f43f5e;
+  box-shadow: 0 0 5px rgba(244, 63, 94, 0.75);
+}
+.dark .siri-bar-rose {
+  background-color: #fb7185;
+  box-shadow: 0 0 7px rgba(251, 113, 133, 0.85);
+}
+
+/* Accessibility: respect user preference for reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .siri-wave-animated {
+    animation: none !important;
+    transform: scaleY(0.55) !important;
+  }
+}
+
 

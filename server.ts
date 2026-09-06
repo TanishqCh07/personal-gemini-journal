@@ -63,12 +63,32 @@ async function generateContentWithFallback(options: FallbackOptions) {
   const ai = getAiClient();
   let lastError: any = null;
 
+  // Apply default latency-reducing thinkingConfig and maxOutputTokens if not overridden
+  const mergedConfig = {
+    thinkingConfig: {
+      thinkingBudget: 0,
+    },
+    maxOutputTokens: 1024,
+    ...(options.config || {}),
+  };
+
   for (const model of MODEL_FALLBACK_LADDER) {
     try {
+      // Create model-safe configuration (e.g. gemini-3.6-flash requires thinkingBudget >= 1)
+      const modelConfig = { ...mergedConfig };
+      if (modelConfig.thinkingConfig) {
+        modelConfig.thinkingConfig = {
+          ...modelConfig.thinkingConfig,
+          thinkingBudget: (model.includes('3.6') && modelConfig.thinkingConfig.thinkingBudget === 0)
+            ? 1
+            : modelConfig.thinkingConfig.thinkingBudget,
+        };
+      }
+
       const response = await ai.models.generateContent({
         model,
         contents: options.contents,
-        config: options.config,
+        config: modelConfig,
       });
 
       if (response && response.text) {
@@ -178,6 +198,10 @@ Your concise 1-2 sentence key takeaway here.
       config: {
         systemInstruction,
         temperature: 0.7,
+        thinkingConfig: {
+          thinkingBudget: 0,
+        },
+        maxOutputTokens: 1024,
       },
     });
 
@@ -207,6 +231,15 @@ Your concise 1-2 sentence key takeaway here.
       error: message,
     });
   }
+});
+
+/**
+ * GET /api/config/maps-key
+ * Secure proxy returning client-scoped Google Maps API key if configured
+ */
+app.get('/api/config/maps-key', (_req, res) => {
+  const mapsApiKey = process.env.MAPS_API_KEY || process.env.VITE_MAPS_API_KEY || '';
+  return res.json({ mapsApiKey });
 });
 
 /**
@@ -263,6 +296,10 @@ Guidelines:
       config: {
         systemInstruction,
         temperature: 0.7,
+        thinkingConfig: {
+          thinkingBudget: 0,
+        },
+        maxOutputTokens: 1024,
       },
     });
 
@@ -530,7 +567,13 @@ Provide a thoughtful, constructive answer acknowledging that their vault is curr
 
         const fallbackResult = await generateContentWithFallback({
           contents: fallbackChatPrompt,
-          config: { temperature: 0.7 },
+          config: {
+            temperature: 0.7,
+            thinkingConfig: {
+              thinkingBudget: 0,
+            },
+            maxOutputTokens: 1024,
+          },
         });
 
         return res.json({
@@ -552,7 +595,13 @@ Takeaway summary here.
 
         const fallbackResult = await generateContentWithFallback({
           contents: promptText,
-          config: { temperature: 0.7 },
+          config: {
+            temperature: 0.7,
+            thinkingConfig: {
+              thinkingBudget: 0,
+            },
+            maxOutputTokens: 1024,
+          },
         });
 
         let rawText = fallbackResult.text;
@@ -630,6 +679,10 @@ Respond ONLY with valid JSON conforming to:
         config: {
           temperature: 0.2,
           responseMimeType: 'application/json',
+          thinkingConfig: {
+            thinkingBudget: 0,
+          },
+          maxOutputTokens: 1024,
         },
       });
 
@@ -745,6 +798,10 @@ Original Entry Context: "${(initialEntry || '').slice(0, 2000)}"`;
         config: {
           systemInstruction: chatSystemInstruction,
           temperature: 0.7,
+          thinkingConfig: {
+            thinkingBudget: 0,
+          },
+          maxOutputTokens: 1024,
         },
       });
 
@@ -792,6 +849,10 @@ ${query}
         config: {
           systemInstruction: reflectSystemInstruction,
           temperature: 0.7,
+          thinkingConfig: {
+            thinkingBudget: 0,
+          },
+          maxOutputTokens: 1024,
         },
       });
 

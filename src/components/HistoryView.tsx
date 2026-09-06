@@ -4,12 +4,14 @@ import {
   BookOpen, 
   FolderOpen, 
   PlusCircle, 
-  ArrowLeft 
+  ArrowLeft,
+  Star
 } from 'lucide-react';
 import { Interaction } from '../types';
 import { HistoryCard } from './HistoryCard';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { InteractionView } from './InteractionView';
+import { speechManager } from '../lib/speechSynthesis';
 
 interface HistoryViewProps {
   userId: string;
@@ -17,6 +19,8 @@ interface HistoryViewProps {
   selectedInteraction: Interaction | null;
   onSelectInteraction: (interaction: Interaction | null) => void;
   onDelete: (interactionId: string) => void | Promise<void>;
+  onToggleStar: (interaction: Interaction) => void | Promise<void>;
+  onReorder: (draggedId: string, targetId: string) => void | Promise<void>;
   onNewReflection: () => void;
   onInteractionUpdated: (updated: Interaction) => void;
 }
@@ -27,6 +31,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   selectedInteraction,
   onSelectInteraction,
   onDelete,
+  onToggleStar,
+  onReorder,
   onNewReflection,
   onInteractionUpdated,
 }) => {
@@ -35,13 +41,23 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   const [entryToDelete, setEntryToDelete] = useState<Interaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Drag-and-drop state
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
+  // Drag-to-reorder is only active when unfiltered (category === 'all' and search is empty)
+  const isDragEnabled = filterCategory === 'all' && searchTerm.trim() === '';
+
   // If an entry is selected, render the full-screen InteractionView with back to grid
   if (selectedInteraction) {
     return (
       <div className="space-y-4">
         <button
           type="button"
-          onClick={() => onSelectInteraction(null)}
+          onClick={() => {
+            speechManager.stop();
+            onSelectInteraction(null);
+          }}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer shadow-2xs"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
@@ -52,9 +68,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           userId={userId}
           interaction={selectedInteraction}
           vaultInteractions={interactions}
-          onBack={() => onSelectInteraction(null)}
+          onBack={() => {
+            speechManager.stop();
+            onSelectInteraction(null);
+          }}
           onInteractionUpdated={onInteractionUpdated}
           onDelete={async (id) => {
+            speechManager.stop();
             await onDelete(id);
             onSelectInteraction(null);
           }}
@@ -73,6 +93,43 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       (item.summary && item.summary.toLowerCase().includes(term));
     return matchesCategory && matchesSearch;
   });
+
+  // Separate into Starred and Unstarred blocks (starred always floats on top)
+  const starredList = filteredInteractions.filter((item) => Boolean(item.starred));
+  const unstarredList = filteredInteractions.filter((item) => !item.starred);
+
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, item: Interaction) => {
+    setDraggedId(item.id);
+    e.dataTransfer.setData('text/plain', item.id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>, item: Interaction) => {
+    if (!isDragEnabled || !draggedId || draggedId === item.id) return;
+    setDragOverId(item.id);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>, item: Interaction) => {
+    if (dragOverId === item.id) {
+      setDragOverId(null);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>, targetItem: Interaction) => {
+    if (!isDragEnabled || !draggedId || draggedId === targetItem.id) {
+      setDraggedId(null);
+      setDragOverId(null);
+      return;
+    }
+    onReorder(draggedId, targetItem.id);
+    setDraggedId(null);
+    setDragOverId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedId(null);
+    setDragOverId(null);
+  };
 
   const handleDeleteConfirmed = async () => {
     if (!entryToDelete) return;
@@ -175,16 +232,83 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredInteractions.map((item) => (
-            <HistoryCard
-              key={item.id}
-              item={item}
-              isSelected={selectedInteraction?.id === item.id}
-              onSelect={(target) => onSelectInteraction(target)}
-              onDeleteRequest={(target) => setEntryToDelete(target)}
-            />
-          ))}
+        <div className="space-y-8">
+          {/* Starred Group (always on top as a distinct block) */}
+          {starredList.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Star className="w-4 h-4 fill-amber-400 text-amber-500 dark:fill-amber-400 dark:text-amber-400" />
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                    Starred Reflections ({starredList.length})
+                  </h2>
+                </div>
+                {isDragEnabled && starredList.length > 1 && (
+                  <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
+                    Drag cards to reorder within Starred
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {starredList.map((item) => (
+                  <HistoryCard
+                    key={item.id}
+                    item={item}
+                    isSelected={selectedInteraction?.id === item.id}
+                    onSelect={(target) => onSelectInteraction(target)}
+                    onDeleteRequest={(target) => setEntryToDelete(target)}
+                    onToggleStar={onToggleStar}
+                    isDragEnabled={isDragEnabled}
+                    onDragStart={handleDragStart}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onDragEnd={handleDragEnd}
+                    isDragging={draggedId === item.id}
+                    isDragOver={dragOverId === item.id && draggedId !== item.id}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Unstarred Group */}
+          {unstarredList.length > 0 && (
+            <div className="space-y-3">
+              {starredList.length > 0 && (
+                <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    All Reflections ({unstarredList.length})
+                  </h2>
+                  {isDragEnabled && unstarredList.length > 1 && (
+                    <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
+                      Drag cards to reorder within All
+                    </span>
+                  )}
+                </div>
+              )}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {unstarredList.map((item) => (
+                  <HistoryCard
+                    key={item.id}
+                    item={item}
+                    isSelected={selectedInteraction?.id === item.id}
+                    onSelect={(target) => onSelectInteraction(target)}
+                    onDeleteRequest={(target) => setEntryToDelete(target)}
+                    onToggleStar={onToggleStar}
+                    isDragEnabled={isDragEnabled}
+                    onDragStart={handleDragStart}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onDragEnd={handleDragEnd}
+                    isDragging={draggedId === item.id}
+                    isDragOver={dragOverId === item.id && draggedId !== item.id}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

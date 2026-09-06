@@ -1,11 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { BookOpen, PlusCircle } from 'lucide-react';
 import { onAuthStateChanged, fbSignOut, auth, User } from './lib/firebase';
 import { 
   subscribeToUserInteractions, 
   deleteInteractionFromFirestore, 
+  updateInteractionInFirestore,
+  batchUpdateSortOrdersInFirestore,
   syncUserProfile 
 } from './lib/firestoreService';
+import { sortVaultInteractions, calculateReorderedVault } from './lib/sortUtils';
 import { Interaction } from './types';
 import { LandingPage } from './components/LandingPage';
 import { Navbar, NavigationTab } from './components/Navbar';
@@ -17,7 +20,17 @@ import { DashboardView } from './components/DashboardView';
 import { InsightsView } from './components/InsightsView';
 import { SettingsView } from './components/SettingsView';
 import { SystemModal } from './components/SystemModal';
-import { Theme, getInitialTheme, setStoredTheme, applyTheme } from './lib/theme';
+import { 
+  Theme, 
+  getInitialTheme, 
+  setStoredTheme, 
+  applyTheme, 
+  AccentColor, 
+  getInitialAccent, 
+  setStoredAccent, 
+  applyAccent 
+} from './lib/theme';
+import { speechManager } from './lib/speechSynthesis';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -25,16 +38,23 @@ export default function App() {
   const [interactions, setInteractions] = useState<Interaction[]>([]);
   const [selectedInteraction, setSelectedInteraction] = useState<Interaction | null>(null);
   const [systemModalOpen, setSystemModalOpen] = useState(false);
+  const [shouldAutoSpeak, setShouldAutoSpeak] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'compose' | 'history'>('compose');
   const [navTab, setNavTab] = useState<NavigationTab>('journal');
   const [resetSignal, setResetSignal] = useState(0);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
+  const [accent, setAccent] = useState<AccentColor>(getInitialAccent);
 
   // Sync theme with DOM and listen for system theme changes if no preference is saved
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  // Sync accent with DOM
+  useEffect(() => {
+    applyAccent(accent);
+  }, [accent]);
 
   const handleToggleTheme = () => {
     setTheme((prev) => {
@@ -42,6 +62,11 @@ export default function App() {
       setStoredTheme(nextTheme);
       return nextTheme;
     });
+  };
+
+  const handleSelectAccent = (newAccent: AccentColor) => {
+    setAccent(newAccent);
+    setStoredAccent(newAccent);
   };
 
   // 1. Listen for Firebase Auth state changes
@@ -108,8 +133,15 @@ export default function App() {
     setSelectedInteraction(null);
   };
 
+  // Consume autoSpeak trigger reliably
+  const handleAutoSpeakConsumed = useCallback(() => {
+    setShouldAutoSpeak(false);
+  }, []);
+
   // Unified handler to reliably open the journal composer every time
   const handleOpenNewReflection = () => {
+    speechManager.stop();
+    setShouldAutoSpeak(false);
     setSelectedInteraction(null);
     setNavTab('journal');
     setActiveTab('compose');
@@ -133,6 +165,8 @@ export default function App() {
 
   // Open entry detail in History tab
   const handleOpenEntryInHistory = (entry: Interaction) => {
+    speechManager.stop();
+    setShouldAutoSpeak(false);
     setSelectedInteraction(entry);
     setNavTab('history');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -140,6 +174,8 @@ export default function App() {
 
   // Select interaction handler
   const handleSelectInteraction = (interaction: Interaction) => {
+    speechManager.stop();
+    setShouldAutoSpeak(false);
     setSelectedInteraction(interaction);
     setActiveTab('compose');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -147,10 +183,54 @@ export default function App() {
 
   // Handler for updated interaction (optimistically updates both selected interaction and the interactions vault list)
   const handleInteractionUpdated = (updated: Interaction) => {
-    setSelectedInteraction(updated);
+    setSelectedInteraction((prev) => (prev?.id === updated.id ? updated : prev));
     setInteractions((prev) =>
-      prev.map((item) => (item.id === updated.id ? updated : item))
+      sortVaultInteractions(
+        prev.map((item) => (item.id === updated.id ? updated : item))
+      )
     );
+  };
+
+  // Handler to toggle star on an interaction
+  const handleToggleStar = async (interaction: Interaction) => {
+    if (!user) return;
+    const newStarred = !interaction.starred;
+    const updated: Interaction = { ...interaction, starred: newStarred };
+
+    // Optimistically update
+    handleInteractionUpdated(updated);
+
+    try {
+      await updateInteractionInFirestore(user.uid, interaction.id, {
+        starred: newStarred,
+      });
+    } catch (err) {
+      console.error('Failed to toggle star in Firestore:', err);
+      // Revert if failed
+      handleInteractionUpdated(interaction);
+    }
+  };
+
+  // Handler for drag-and-drop reordering
+  const handleReorderInteractions = async (draggedId: string, targetId: string) => {
+    if (!user) return;
+    const { updatedEntries, affectedUpdates } = calculateReorderedVault(
+      interactions,
+      draggedId,
+      targetId
+    );
+
+    if (affectedUpdates.length === 0) return;
+
+    // Optimistically update list
+    setInteractions(updatedEntries);
+
+    try {
+      await batchUpdateSortOrdersInFirestore(user.uid, affectedUpdates);
+    } catch (err) {
+      console.error('Failed to persist reorder to Firestore:', err);
+      setInteractions(interactions);
+    }
   };
 
   // Delete interaction handler
@@ -203,6 +283,8 @@ export default function App() {
         user={user}
         activeNavTab={navTab}
         onSelectNavTab={(tab) => {
+          speechManager.stop();
+          setShouldAutoSpeak(false);
           setNavTab(tab);
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
@@ -281,6 +363,8 @@ export default function App() {
                     userId={user.uid}
                     interaction={selectedInteraction}
                     vaultInteractions={interactions}
+                    autoSpeak={shouldAutoSpeak}
+                    onAutoSpeakConsumed={handleAutoSpeakConsumed}
                     onBack={handleOpenNewReflection}
                     onInteractionUpdated={handleInteractionUpdated}
                     onDelete={handleDeleteInteraction}
@@ -290,8 +374,10 @@ export default function App() {
                     userId={user.uid}
                     resetSignal={resetSignal}
                     vaultInteractions={interactions}
-                    onEntrySaved={(newInteraction) => {
+                    onEntrySaved={(newInteraction, options) => {
+                      speechManager.stop();
                       setSelectedInteraction(newInteraction);
+                      setShouldAutoSpeak(Boolean(options?.autoSpeak));
                       setActiveTab('compose');
                       window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
@@ -306,6 +392,8 @@ export default function App() {
                   selectedId={selectedInteraction?.id || null}
                   onSelect={handleSelectInteraction}
                   onDelete={handleDeleteInteraction}
+                  onToggleStar={handleToggleStar}
+                  onReorder={handleReorderInteractions}
                   onNewReflection={handleOpenNewReflection}
                 />
               </div>
@@ -321,6 +409,8 @@ export default function App() {
             selectedInteraction={selectedInteraction}
             onSelectInteraction={(target) => setSelectedInteraction(target)}
             onDelete={handleDeleteInteraction}
+            onToggleStar={handleToggleStar}
+            onReorder={handleReorderInteractions}
             onNewReflection={handleOpenNewReflection}
             onInteractionUpdated={handleInteractionUpdated}
           />
@@ -337,6 +427,8 @@ export default function App() {
             user={user}
             theme={theme}
             onToggleTheme={handleToggleTheme}
+            accent={accent}
+            onSelectAccent={handleSelectAccent}
             onSignOut={handleSignOut}
             onOpenSystemModal={() => setSystemModalOpen(true)}
           />

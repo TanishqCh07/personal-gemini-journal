@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Sparkles, 
   Send, 
@@ -14,7 +14,10 @@ import {
   Search,
   MapPin,
   Trash2,
-  Pencil
+  Pencil,
+  Star,
+  Volume2,
+  Square
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Interaction, DialogueMessage } from '../types';
@@ -22,6 +25,12 @@ import { sendChatDialogueApi, recallFromVaultApi } from '../lib/geminiApi';
 import { updateInteractionInFirestore, formatEditedDate } from '../lib/firestoreService';
 import { CitationsList } from './CitationsList';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
+import { useSpeech, speechManager, VOICE_MODE_STORAGE_KEY, isSpeechSynthesisSupported } from '../lib/speechSynthesis';
+import { AudioWaveVisualizer } from './AudioWaveVisualizer';
+
+// Global module-level registry of interaction responses that have already been auto-spoken
+// to guarantee an entry is NEVER spoken twice across remounts, fast re-renders, or tab switches
+const autoSpokenResponseKeys = new Set<string>();
 
 interface InteractionViewProps {
   userId: string;
@@ -30,6 +39,8 @@ interface InteractionViewProps {
   onInteractionUpdated: (updated: Interaction) => void;
   onDelete?: (interactionId: string) => void | Promise<void>;
   vaultInteractions?: Interaction[];
+  autoSpeak?: boolean;
+  onAutoSpeakConsumed?: () => void;
 }
 
 export const InteractionView: React.FC<InteractionViewProps> = ({
@@ -39,6 +50,8 @@ export const InteractionView: React.FC<InteractionViewProps> = ({
   onInteractionUpdated,
   onDelete,
   vaultInteractions,
+  autoSpeak = false,
+  onAutoSpeakConsumed,
 }) => {
   const [chatInput, setChatInput] = useState('');
   const [loadingChat, setLoadingChat] = useState(false);
@@ -54,6 +67,34 @@ export const InteractionView: React.FC<InteractionViewProps> = ({
   const [editContent, setEditContent] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Speech synthesis hook
+  const { isSpeakingId, isActiveOrSettling, speak, stop } = useSpeech();
+
+  // Guard to prevent speaking the same response more than once
+  const hasSpokenForThisResponseRef = useRef<string | null>(null);
+
+  // If autoSpeak is requested (Voice Mode is on and entry was just generated), speak primary response
+  useEffect(() => {
+    if (autoSpeak && interaction.aiResponse && interaction.id) {
+      const responseKey = `primary-${interaction.id}`;
+      if (autoSpokenResponseKeys.has(responseKey) || hasSpokenForThisResponseRef.current === responseKey) {
+        // Already spoken for this response - prevent duplicate audio
+        return;
+      }
+      autoSpokenResponseKeys.add(responseKey);
+      hasSpokenForThisResponseRef.current = responseKey;
+      speak(responseKey, interaction.aiResponse);
+      onAutoSpeakConsumed?.();
+    }
+  }, [interaction.id, autoSpeak, interaction.aiResponse, onAutoSpeakConsumed]);
+
+  // Cancel speech on unmount
+  useEffect(() => {
+    return () => {
+      speechManager.stop();
+    };
+  }, []);
 
   // Reset edit state whenever selected interaction changes
   useEffect(() => {
@@ -142,6 +183,9 @@ export const InteractionView: React.FC<InteractionViewProps> = ({
     if (e) e.preventDefault();
     if (!chatInput.trim() || loadingChat) return;
 
+    // Cancel in-progress speech when user sends a new message
+    speechManager.stop();
+
     const userMessageText = chatInput.trim();
     setChatInput('');
     setLoadingChat(true);
@@ -213,6 +257,21 @@ export const InteractionView: React.FC<InteractionViewProps> = ({
       });
 
       onInteractionUpdated(finalizedInteraction);
+
+      // Check if Voice Mode is on in localStorage to read new chat response aloud
+      const isVoiceModeOn =
+        typeof window !== 'undefined' &&
+        localStorage.getItem(VOICE_MODE_STORAGE_KEY) === 'true';
+      if (isVoiceModeOn && modelMsg.content) {
+        // In the UI, interaction.messages.slice(2) maps with index = updatedMessages.length - 3
+        const chatSliceIndex = Math.max(0, updatedMessages.length - 3);
+        const chatMsgKey = `msg-${chatSliceIndex}-${interaction.id}`;
+        if (!autoSpokenResponseKeys.has(chatMsgKey) && hasSpokenForThisResponseRef.current !== chatMsgKey) {
+          autoSpokenResponseKeys.add(chatMsgKey);
+          hasSpokenForThisResponseRef.current = chatMsgKey;
+          speak(chatMsgKey, modelMsg.content);
+        }
+      }
     } catch (err: any) {
       console.error('Error in multi-turn conversation:', err);
       setChatError(err?.message || 'Failed to receive response from Gemini. Please try again.');
@@ -261,6 +320,39 @@ export const InteractionView: React.FC<InteractionViewProps> = ({
                 <span>Copy Summary</span>
               </>
             )}
+          </button>
+
+          <button
+            id="star-detail-entry-btn"
+            type="button"
+            onClick={async () => {
+              const newStarred = !interaction.starred;
+              const updated = { ...interaction, starred: newStarred };
+              onInteractionUpdated(updated);
+              try {
+                await updateInteractionInFirestore(userId, interaction.id, {
+                  starred: newStarred,
+                });
+              } catch (err) {
+                console.error('Failed to toggle star in detail view:', err);
+                onInteractionUpdated(interaction);
+              }
+            }}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
+              interaction.starred
+                ? 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 border-amber-200 dark:border-amber-800'
+                : 'text-slate-600 dark:text-slate-300 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50/50 dark:hover:bg-amber-950/30 border-slate-200 dark:border-slate-700 hover:border-amber-200 dark:border-amber-800'
+            }`}
+            title={interaction.starred ? 'Unstar reflection' : 'Star reflection'}
+          >
+            <Star
+              className={`w-3.5 h-3.5 transition-colors ${
+                interaction.starred
+                  ? 'fill-amber-400 text-amber-500 dark:fill-amber-400 dark:text-amber-400'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-amber-500 dark:hover:text-amber-400'
+              }`}
+            />
+            <span>{interaction.starred ? 'Starred' : 'Star'}</span>
           </button>
 
           <button
@@ -473,10 +565,58 @@ export const InteractionView: React.FC<InteractionViewProps> = ({
 
         {/* Gemini Primary Reflection Insights */}
         <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-slate-900 dark:text-slate-100 mb-3">
-            <Bot className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-            <span>Gemini 3.6 Flash Reflection & Brainstorming</span>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-2 text-xs font-semibold text-slate-900 dark:text-slate-100">
+              <Bot className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <span>Gemini 3.6 Flash Reflection & Brainstorming</span>
+            </div>
+
+            {/* Audio Replay / Speaking Indicator & Stop Button */}
+            {isSpeechSynthesisSupported() && (
+              <div className="flex items-center">
+                {isActiveOrSettling(`primary-${interaction.id}`) ? (
+                  <div
+                    id={`speaking-indicator-primary-${interaction.id}`}
+                    className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100/90 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-750 text-slate-800 dark:text-slate-200 shadow-2xs transition-all duration-300"
+                  >
+                    <AudioWaveVisualizer
+                      active={isSpeakingId(`primary-${interaction.id}`)}
+                      colorVariant="accent"
+                      size="md"
+                      barCount={7}
+                    />
+                    <span className="font-semibold text-[11px] select-none text-slate-700 dark:text-slate-200">
+                      {isSpeakingId(`primary-${interaction.id}`) ? 'Speaking...' : 'Ending...'}
+                    </span>
+                    {isSpeakingId(`primary-${interaction.id}`) && (
+                      <button
+                        id={`stop-speech-primary-${interaction.id}`}
+                        type="button"
+                        onClick={() => stop()}
+                        className="ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/50 hover:border-rose-300 hover:text-rose-600 dark:hover:text-rose-400 text-[10px] font-semibold transition cursor-pointer shadow-2xs"
+                        title="Stop speech"
+                      >
+                        <Square className="w-2.5 h-2.5 fill-current" />
+                        <span>Stop</span>
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    id={`play-speech-primary-${interaction.id}`}
+                    type="button"
+                    onClick={() => speak(`primary-${interaction.id}`, interaction.aiResponse)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 bg-slate-50 dark:bg-slate-850 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition cursor-pointer"
+                    title="Read reflection aloud (SpeechSynthesis)"
+                  >
+                    <Volume2 className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+                    <span>Listen</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
+
           <div className="prose prose-sm dark:prose-invert max-w-none text-slate-800 dark:text-slate-200 leading-relaxed bg-white dark:bg-slate-850/60 border border-slate-100 dark:border-slate-800 rounded-xl p-5 shadow-2xs">
             <ReactMarkdown>{interaction.aiResponse}</ReactMarkdown>
           </div>
@@ -542,16 +682,72 @@ export const InteractionView: React.FC<InteractionViewProps> = ({
                         </div>
                       )}
 
-                      <div
-                        className={`text-[10px] mt-1 text-right ${
-                          isUser ? 'text-indigo-200' : 'text-slate-400 dark:text-slate-500'
-                        }`}
-                      >
-                        {new Date(msg.timestamp).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </div>
+                      {/* Model response audio read-aloud controls */}
+                      {!isUser && isSpeechSynthesisSupported() && (
+                        <div className="mt-2.5 pt-2 border-t border-slate-200/60 dark:border-slate-800 flex items-center justify-between gap-2">
+                          {isActiveOrSettling(`msg-${index}-${interaction.id}`) ? (
+                            <div
+                              id={`speaking-indicator-msg-${index}-${interaction.id}`}
+                              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-100/90 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-750 text-slate-800 dark:text-slate-200 text-[11px] font-medium transition-all duration-300"
+                            >
+                              <AudioWaveVisualizer
+                                active={isSpeakingId(`msg-${index}-${interaction.id}`)}
+                                colorVariant="accent"
+                                size="sm"
+                                barCount={5}
+                              />
+                              <span className="font-semibold text-[10px] select-none text-slate-700 dark:text-slate-200">
+                                {isSpeakingId(`msg-${index}-${interaction.id}`) ? 'Speaking...' : 'Ending...'}
+                              </span>
+                              {isSpeakingId(`msg-${index}-${interaction.id}`) && (
+                                <button
+                                  id={`stop-speech-msg-${index}-${interaction.id}`}
+                                  type="button"
+                                  onClick={() => stop()}
+                                  className="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-rose-600 dark:text-rose-400 text-[9px] font-bold cursor-pointer"
+                                  title="Stop speech"
+                                >
+                                  <Square className="w-2 h-2 fill-current" />
+                                  <span>Stop</span>
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <button
+                              id={`play-speech-msg-${index}-${interaction.id}`}
+                              type="button"
+                              onClick={() => speak(`msg-${index}-${interaction.id}`, msg.content)}
+                              className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition cursor-pointer"
+                              title="Read response aloud"
+                            >
+                              <Volume2 className="w-3 h-3 text-slate-400 dark:text-slate-500" />
+                              <span>Listen</span>
+                            </button>
+                          )}
+
+                          <div
+                            className={`text-[10px] ${
+                              isUser ? 'text-indigo-200' : 'text-slate-400 dark:text-slate-500'
+                            }`}
+                          >
+                            {new Date(msg.timestamp).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {isUser && (
+                        <div
+                          className="text-[10px] mt-1 text-right text-indigo-200"
+                        >
+                          {new Date(msg.timestamp).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </div>
+                      )}
                     </div>
                     {isUser && (
                       <div className="w-7 h-7 rounded-lg bg-slate-900 dark:bg-slate-700 text-white flex items-center justify-center shrink-0 mt-1">

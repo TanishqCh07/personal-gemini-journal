@@ -7,9 +7,11 @@ import {
   onSnapshot,
   query,
   orderBy,
+  writeBatch,
 } from 'firebase/firestore';
 import { db, stripUndefined, auth } from './firebase';
 import { Interaction, UserProfile } from '../types';
+import { sortVaultInteractions } from './sortUtils';
 import { User } from 'firebase/auth';
 
 const DEMO_EVENT_NAME = 'gemini_journal_demo_sync';
@@ -240,17 +242,17 @@ export function subscribeToUserInteractions(
 
   if (isDemoUser(userId)) {
     // Immediate delivery for demo sandbox
-    onData(getDemoInteractions(userId));
+    onData(sortVaultInteractions(getDemoInteractions(userId)));
 
     const handler = (e: Event) => {
       const customEvent = e as CustomEvent<{ userId?: string }>;
       if (!customEvent.detail || customEvent.detail.userId === userId) {
-        onData(getDemoInteractions(userId));
+        onData(sortVaultInteractions(getDemoInteractions(userId)));
       }
     };
 
     const storageHandler = () => {
-      onData(getDemoInteractions(userId));
+      onData(sortVaultInteractions(getDemoInteractions(userId)));
     };
 
     window.addEventListener(DEMO_EVENT_NAME, handler);
@@ -276,7 +278,7 @@ export function subscribeToUserInteractions(
           ...(docSnap.data() as Omit<Interaction, 'id'>),
         });
       });
-      onData(items);
+      onData(sortVaultInteractions(items));
     },
     (error) => {
       console.error('Error fetching interactions:', error);
@@ -287,6 +289,49 @@ export function subscribeToUserInteractions(
       }
     }
   );
+}
+
+/**
+ * Persist reordered sortOrder numbers for a group of interactions
+ */
+export async function batchUpdateSortOrdersInFirestore(
+  userId: string,
+  updates: { id: string; sortOrder: number }[]
+): Promise<void> {
+  if (!userId || updates.length === 0) return;
+
+  if (isDemoUser(userId)) {
+    const existing = getDemoInteractions(userId);
+    const updateMap = new Map(updates.map((u) => [u.id, u.sortOrder]));
+    const updated = existing.map((item) => {
+      if (updateMap.has(item.id)) {
+        return {
+          ...item,
+          sortOrder: updateMap.get(item.id)!,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return item;
+    });
+    setDemoInteractions(userId, updated);
+    return;
+  }
+
+  const batch = writeBatch(db);
+  const now = new Date().toISOString();
+  for (const update of updates) {
+    const interactionRef = doc(db, 'users', userId, 'interactions', update.id);
+    batch.update(interactionRef, {
+      sortOrder: update.sortOrder,
+      updatedAt: now,
+    });
+  }
+
+  try {
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `users/${userId}/interactions`);
+  }
 }
 
 /**

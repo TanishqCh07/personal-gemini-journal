@@ -42,6 +42,8 @@ export interface Interaction {
   createdAt: string;
   updatedAt: string;
   editedAt?: string;
+  starred?: boolean;
+  sortOrder?: number;
   citations?: RecallCitation[];
   recalledCount?: number;
   location?: PlaceLocation;

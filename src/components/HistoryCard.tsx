@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, Sparkles, MapPin, Trash2 } from 'lucide-react';
+import { Calendar, Sparkles, MapPin, Trash2, Star, GripVertical } from 'lucide-react';
 import { Interaction } from '../types';
 import { formatEditedDate } from '../lib/firestoreService';
 
@@ -8,6 +8,15 @@ interface HistoryCardProps {
   isSelected?: boolean;
   onSelect: (interaction: Interaction) => void;
   onDeleteRequest: (interaction: Interaction) => void;
+  onToggleStar?: (interaction: Interaction) => void;
+  isDragEnabled?: boolean;
+  onDragStart?: (e: React.DragEvent<HTMLDivElement>, item: Interaction) => void;
+  onDragOver?: (e: React.DragEvent<HTMLDivElement>, item: Interaction) => void;
+  onDragLeave?: (e: React.DragEvent<HTMLDivElement>, item: Interaction) => void;
+  onDrop?: (e: React.DragEvent<HTMLDivElement>, item: Interaction) => void;
+  onDragEnd?: (e: React.DragEvent<HTMLDivElement>) => void;
+  isDragging?: boolean;
+  isDragOver?: boolean;
 }
 
 export const HistoryCard: React.FC<HistoryCardProps> = ({
@@ -15,6 +24,15 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({
   isSelected = false,
   onSelect,
   onDeleteRequest,
+  onToggleStar,
+  isDragEnabled = false,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragEnd,
+  isDragging = false,
+  isDragOver = false,
 }) => {
   const dateStr = item.createdAt
     ? new Date(item.createdAt).toLocaleDateString(undefined, {
@@ -27,14 +45,56 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({
     <div
       id={`history-item-${item.id}`}
       onClick={() => onSelect(item)}
-      className={`group relative p-3.5 rounded-xl border text-left cursor-pointer transition flex flex-col justify-between ${
-        isSelected
+      onDragOver={(e) => {
+        if (!isDragEnabled) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        onDragOver?.(e, item);
+      }}
+      onDragLeave={(e) => {
+        if (!isDragEnabled) return;
+        onDragLeave?.(e, item);
+      }}
+      onDrop={(e) => {
+        if (!isDragEnabled) return;
+        e.preventDefault();
+        onDrop?.(e, item);
+      }}
+      onDragEnd={(e) => {
+        if (!isDragEnabled) return;
+        onDragEnd?.(e);
+      }}
+      className={`group relative p-3.5 rounded-xl border text-left cursor-pointer transition flex flex-col justify-between select-none ${
+        isDragEnabled ? 'pl-6 sm:pl-7' : ''
+      } ${
+        isDragging
+          ? 'opacity-40 border-dashed border-indigo-400 dark:border-indigo-500 scale-[0.99] shadow-none'
+          : isDragOver
+          ? 'ring-2 ring-indigo-500/60 border-indigo-400 dark:border-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/50'
+          : isSelected
           ? 'bg-indigo-50/70 dark:bg-indigo-950/70 border-indigo-200 dark:border-indigo-700/80 shadow-xs ring-1 ring-indigo-500/20'
           : 'bg-white dark:bg-slate-800/90 border-slate-100 dark:border-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50/70 dark:hover:bg-slate-800 shadow-2xs'
       }`}
     >
+      {/* Left-edge Drag Handle (hidden by default, reveals on hover when unfiltered) */}
+      {isDragEnabled && (
+        <div
+          id={`drag-handle-${item.id}`}
+          draggable
+          onDragStart={(e) => {
+            e.stopPropagation();
+            onDragStart?.(e, item);
+          }}
+          onClick={(e) => e.stopPropagation()}
+          className="absolute left-1 sm:left-1.5 top-1/2 -translate-y-1/2 p-1 text-slate-300 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-200 opacity-0 group-hover:opacity-100 transition-opacity duration-150 cursor-grab active:cursor-grabbing rounded hover:bg-slate-100 dark:hover:bg-slate-700/60 z-10"
+          title="Drag to reorder within group"
+        >
+          <GripVertical className="w-3.5 h-3.5" />
+        </div>
+      )}
+
       <div>
-        <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-400 mb-1.5 gap-2">
+        <div className="flex items-start justify-between text-[10px] text-slate-400 dark:text-slate-400 mb-1.5 gap-2">
           <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
             <span className="font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-300 bg-indigo-50/60 dark:bg-indigo-900/60 dark:border dark:border-indigo-800/60 px-1.5 py-0.5 rounded shrink-0">
               {item.category}
@@ -64,6 +124,32 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({
                 <span>Edited</span>
                 <span className="ml-1 opacity-80">{formatEditedDate(item.editedAt)}</span>
               </span>
+            )}
+
+            {/* Star toggle button: outline by default, filled amber when starred */}
+            {onToggleStar && (
+              <button
+                id={`star-entry-card-${item.id}`}
+                type="button"
+                title={item.starred ? 'Unstar reflection' : 'Star reflection'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleStar(item);
+                }}
+                className={`p-1 rounded-md transition cursor-pointer ${
+                  item.starred
+                    ? 'text-amber-500 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40'
+                    : 'text-slate-400 dark:text-slate-400 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-amber-50/60 dark:hover:bg-amber-950/30'
+                }`}
+              >
+                <Star
+                  className={`w-3.5 h-3.5 transition-colors ${
+                    item.starred
+                      ? 'fill-amber-400 text-amber-500 dark:fill-amber-400 dark:text-amber-400'
+                      : 'text-slate-400 dark:text-slate-400 hover:text-amber-500 dark:hover:text-amber-400'
+                  }`}
+                />
+              </button>
             )}
 
             {/* Delete button: small trash icon */}

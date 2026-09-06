@@ -32,6 +32,8 @@
         "createdAt": { "type": "string", "description": "ISO timestamp of creation" },
         "updatedAt": { "type": "string", "description": "ISO timestamp of last update" },
         "editedAt": { "type": "string", "description": "ISO timestamp of user edit" },
+        "starred": { "type": "boolean", "description": "Whether user marked the reflection as a starred favorite" },
+        "sortOrder": { "type": "number", "description": "Manual drag-and-drop sort order position" },
         "content": { "type": "string", "description": "Original journal content" }
       },
       "required": ["userId", "title", "entry", "aiResponse", "createdAt"]

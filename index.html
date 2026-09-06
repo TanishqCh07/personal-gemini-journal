@@ -12,14 +12,21 @@
     <script>
       (function() {
         try {
-          var saved = localStorage.getItem('gemini_journal_theme');
-          var isDark = saved === 'dark' || (!saved && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var savedTheme = localStorage.getItem('gemini_journal_theme');
+          var isDark = savedTheme === 'dark' || (!savedTheme && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
           if (isDark) {
             document.documentElement.classList.add('dark');
             document.documentElement.style.colorScheme = 'dark';
           } else {
             document.documentElement.classList.remove('dark');
             document.documentElement.style.colorScheme = 'light';
+          }
+
+          var savedAccent = localStorage.getItem('gemini_journal_accent');
+          if (savedAccent && ['violet', 'ocean', 'emerald', 'rose', 'amber'].indexOf(savedAccent) !== -1) {
+            document.documentElement.setAttribute('data-accent', savedAccent);
+          } else {
+            document.documentElement.setAttribute('data-accent', 'violet');
           }
         } catch (e) {}
       })();
